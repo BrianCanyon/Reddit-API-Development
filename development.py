@@ -1,2 +1,2 @@
-import pandas as pd
-print("hello world")
+import pandas
+import requests
