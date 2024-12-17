@@ -1,11 +1,13 @@
 ## Libraries
 import requests
+import datetime
+import time
 
 ## Authentication
 def get_reddit_token():
 
     # Credentials, saved locally. Needs to be revised
-    login_file_path = "C:\\Users\\j\\Documents\\reddit_login_secret.txt"
+    login_file_path = "/Users/brian.canyon/documents/reddit_login_secret.txt"
     credentials_dict = {}
     with open(login_file_path) as login_info:
         for line in login_info:
@@ -40,14 +42,14 @@ headers = {
     'User-Agent': 'MyBot'
     }
 # This URL returns the single most recent post on /WSB, URL stuff confuses me greatly, so I am defining what does what
-subreddit_url = 'https://oauth.reddit.com/r/wallstreetbets/new?limit=5'
-response = requests.get(subreddit_url, headers=headers)
-print(type(response))
+subreddit = 'investing'
+base_url = f'https://oauth.reddit.com/r/{subreddit}/new?limit=100'
+response = requests.get(base_url, headers=headers)
 if response.status_code == 200:
     post_data = response.json()
-    print(type(post_data))
 else:
-    print('cooked')
+    print('cooked') #xD
+    print(response.status_code)
 
 ## Going to try and make a few simple functions for working with the response dump. It returns a nasty JSON file with all types of information imbedded, creating a few
 ## easy to read/use functions will support further development efforts.
@@ -58,6 +60,40 @@ def get_post_ids(post_dict):
     return id_list
 
 
+def fetch_posts(url, after=None):
+    if after:
+        url = f"{url}&after={after}"
+    response = requests.get(url, headers=headers)
+    ## This is strictly for debugging, fix later
+    print(f"Status Code: {response.status_code}")
+    if response.status_code != 200:
+        raise Exception(f"Error fetching data: {response.status_code}")
+    return response.json()
+post_ids = []
 
-print(get_post_ids(post_data))
+timestamp_dt = datetime.datetime.now()
+historical_data_limit = timestamp_dt - datetime.timedelta(weeks=15)
+last_post = None
+while timestamp_dt > historical_data_limit:
+    response_data = fetch_posts(base_url, after=last_post)
+    posts = response_data['data']['children']
+
+    if not posts: #check is the posts list is empty, unsure why this would be
+        print(last_post)
+        print(response_data)
+        print(posts)
+        print(timestamp_dt)
+        print('no more posts found')
+        break
+
+    last_post = posts[-1]['data']['name']
+    post_ids.extend([post['data']['id'] for post in posts])
+    timestamp_utc = posts[-1]['data']['created_utc'] #this line creates a timestamp but in utc format
+    timestamp_dt = datetime.datetime.fromtimestamp(timestamp_utc)
+    time.sleep(1) # Accomidating reddit API call frequency limits, yes this script will be slow
+    
+print(post_ids)
+print(len(post_ids))
+
+
 
