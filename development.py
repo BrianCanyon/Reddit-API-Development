@@ -24,37 +24,30 @@ def get_reddit_token():
         'username': credentials_dict['username'],
         'password': credentials_dict['password']
         }
-    response = requests.post(url, headers=headers, data=data, auth=(credentials_dict['client_id'], credentials_dict['client_secret']))
+    response = requests.post(url, headers=headers, data=data, auth=(credentials_dict['client_id'],\
+                                                                     credentials_dict['client_secret']))
+    # If authentication is successful, the token is returned
     if response.status_code == 200:
         token = response.json().get('access_token')
         return token
     else:
         return response.json()
     
-## Lets try to query some post data
+## Now that we have a token for authentication, we can query reddit data directly (get)
 
-# ChatGPT says these are the most popular stock related subreddits, I chose to toss bitcoin in becuase why not
+# ChatGPT says these are the most popular stock related subreddits. I chose to toss bitcoin in becuase
+# why not, this list can be modified to target whichever subreddits the user would like info on.
+stock_sub_list = ['r/wallstreetbets', 'r/stocks', 'r/investing', 'r/pennystocks', 'r/StockMarket', \
+                  'r/Daytrading', 'r/Options', 'r/Finance', 'r/Dividends', 'r/Bitcoin']
 
-stock_sub_list = ['r/wallstreetbets', 'r/stocks', 'r/investing', 'r/pennystocks', 'r/StockMarket', 'r/Daytrading', 'r/Options', 'r/Finance', 'r/Dividends', 'r/Bitcoin']
+# Token is created and saved in the 'headers' variable, which will be part of future get requests.
 token = get_reddit_token()
 headers = {
     'Authorization': f'Bearer {token}',
     'User-Agent': 'MyBot'
     }
-# This URL returns the single most recent post on /WSB, URL stuff confuses me greatly, so I am defining what does what
-subreddit = 'investing'
-base_url = f'https://oauth.reddit.com/r/{subreddit}/new?limit=1000'
-response = requests.get(base_url, headers=headers)
-if response.status_code == 200:
-    post_data = response.json()
-else:
-    print('cooked') #xD
-    print(response.status_code)
 
-## Going to try and make a few simple functions for working with the response dump. It returns a nasty JSON file with all types of information imbedded, creating a few
-## easy to read/use functions will support further development efforts.
-
-
+# Given a url, this function will return the reponse. If failed, will return the error status code.
 def fetch_posts(url):
     response = requests.get(url, headers=headers)
     ## This is strictly for debugging, fix later
@@ -62,7 +55,9 @@ def fetch_posts(url):
     if response.status_code != 200:
         raise Exception(f"Error fetching data: {response.status_code}")
     return response.json()
-## Target data to extract from json dump
+
+# Below are the target lists we are looking to generate, notice [id, title, sub, ups, ups_ratio, text]
+# will be captured for each post within the set time duration, for each targeted sub.
 post_id = []
 post_title = []
 post_sub = []
@@ -70,18 +65,28 @@ post_ups = []
 post_ups_ratio = []
 post_text = []
 
-## This loop intends to pull the top 100 postIDs per day from each target subreddit, and save them in a list
-stock_sub_list = ['r/stocks', 'r/bitcoin']
+## This loop will populate the above lists
 for sub in stock_sub_list:
+    # The url changes throughout each itteration of the loop, it is a unique identifier as to what 
+    # data we are looking to query from reddit. This step only changes the subreddit.  
     base_url = f'https://oauth.reddit.com/{sub}/top?limit=100&t=day'
+
+    # These two lines determine what timeframe to build out a historical backlog. The 'weeks' parameter
+    # in the 'timedelta' function can be modified to scrape as much historical data as required. 
     start_date_dt = datetime.datetime.now()
     end_date_dt = start_date_dt - datetime.timedelta(weeks=1)
+
+    # Inner loop targets the top 100 (ie. all) posts within a specific subreddit per day. The loop
+    # breaks once it has traversed back to 'end_date_dt'.
     while start_date_dt > end_date_dt:
-        # Converting datetime to unix format
+        # Converting datetime to unix format.
         before_timestamp = int(start_date_dt.timestamp())
         after_timestamp = int((start_date_dt - datetime.timedelta(days=1)).timestamp())
+        
+        # Embedding datetime values into the url in proper format.
         url = f'{base_url}&before={before_timestamp}&after={after_timestamp}'
-        print(url)
+
+        # Getting the json response data
         response_data = fetch_posts(url)
         posts = response_data['data']['children']
 
@@ -92,8 +97,11 @@ for sub in stock_sub_list:
         # For debugging, having issues where API call returns 200 (sucsess) but has empty list
         if not posts:
             print(f"No posts found for {start_date_dt.strftime('%Y-%m-%d')}.")
-        # If response is not empty, appends values to primary list
+        # If response is not empty, appends values to primary lists
+        # Likely should be noted that this messy append stuff only exists becuase we need to translate
+        # json format to column/row
         else:
+            # populating each list with proper data
             for post in posts:
                 post_id.append(post['data']['id'])
                 post_title.append(post['data']['title'])
@@ -104,6 +112,7 @@ for sub in stock_sub_list:
             
         # Moving date range one day backward    
         start_date_dt -= datetime.timedelta(days=1)
+        
         # Respecting reddit API call limits
         time.sleep(1)
 
