@@ -43,7 +43,7 @@ headers = {
     }
 # This URL returns the single most recent post on /WSB, URL stuff confuses me greatly, so I am defining what does what
 subreddit = 'investing'
-base_url = f'https://oauth.reddit.com/r/{subreddit}/new?limit=100'
+base_url = f'https://oauth.reddit.com/r/{subreddit}/new?limit=1000'
 response = requests.get(base_url, headers=headers)
 if response.status_code == 200:
     post_data = response.json()
@@ -53,47 +53,69 @@ else:
 
 ## Going to try and make a few simple functions for working with the response dump. It returns a nasty JSON file with all types of information imbedded, creating a few
 ## easy to read/use functions will support further development efforts.
-def get_post_ids(post_dict):
-    id_list = []
-    for post in post_dict['data']['children']:
-        id_list.append(post['data']['id'])
-    return id_list
 
 
-def fetch_posts(url, after=None):
-    if after:
-        url = f"{url}&after={after}"
+def fetch_posts(url):
     response = requests.get(url, headers=headers)
     ## This is strictly for debugging, fix later
     print(f"Status Code: {response.status_code}")
     if response.status_code != 200:
         raise Exception(f"Error fetching data: {response.status_code}")
     return response.json()
-post_ids = []
+## Target data to extract from json dump
+post_id = []
+post_title = []
+post_sub = []
+post_ups = []
+post_ups_ratio = []
+post_text = []
 
-timestamp_dt = datetime.datetime.now()
-historical_data_limit = timestamp_dt - datetime.timedelta(weeks=15)
-last_post = None
-while timestamp_dt > historical_data_limit:
-    response_data = fetch_posts(base_url, after=last_post)
-    posts = response_data['data']['children']
+## This loop intends to pull the top 100 postIDs per day from each target subreddit, and save them in a list
+stock_sub_list = ['r/stocks', 'r/bitcoin']
+for sub in stock_sub_list:
+    base_url = f'https://oauth.reddit.com/{sub}/top?limit=100&t=day'
+    start_date_dt = datetime.datetime.now()
+    end_date_dt = start_date_dt - datetime.timedelta(weeks=1)
+    while start_date_dt > end_date_dt:
+        # Converting datetime to unix format
+        before_timestamp = int(start_date_dt.timestamp())
+        after_timestamp = int((start_date_dt - datetime.timedelta(days=1)).timestamp())
+        url = f'{base_url}&before={before_timestamp}&after={after_timestamp}'
+        print(url)
+        response_data = fetch_posts(url)
+        posts = response_data['data']['children']
 
-    if not posts: #check is the posts list is empty, unsure why this would be
-        print(last_post)
-        print(response_data)
-        print(posts)
-        print(timestamp_dt)
-        print('no more posts found')
-        break
+        if response_data is None or 'data' not in response_data or 'children' not in response_data['data']:
+            print("No more posts found or error in fetching data.")
+            break
+        
+        # For debugging, having issues where API call returns 200 (sucsess) but has empty list
+        if not posts:
+            print(f"No posts found for {start_date_dt.strftime('%Y-%m-%d')}.")
+        # If response is not empty, appends values to primary list
+        else:
+            for post in posts:
+                post_id.append(post['data']['id'])
+                post_title.append(post['data']['title'])
+                post_sub.append(post['data']['subreddit'])
+                post_ups.append(post['data']['ups'])
+                post_ups_ratio.append(post['data']['upvote_ratio'])
+                post_text.append(post['data'].get('selftext', ''))
+            
+        # Moving date range one day backward    
+        start_date_dt -= datetime.timedelta(days=1)
+        # Respecting reddit API call limits
+        time.sleep(1)
 
-    last_post = posts[-1]['data']['name']
-    post_ids.extend([post['data']['id'] for post in posts])
-    timestamp_utc = posts[-1]['data']['created_utc'] #this line creates a timestamp but in utc format
-    timestamp_dt = datetime.datetime.fromtimestamp(timestamp_utc)
-    time.sleep(1) # Accomidating reddit API call frequency limits, yes this script will be slow
-    
-print(post_ids)
-print(len(post_ids))
+        ## Inlcuding this print statement for sanity as this takes forever to run
+        print(start_date_dt)
+
+print(post_id)
+print(len(post_id))
+print(len(post_sub))
+print(len(post_ups))
+print(len(post_text))
+print(post_title[-1])
 
 
 
