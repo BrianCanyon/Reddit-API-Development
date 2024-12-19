@@ -2,8 +2,21 @@
 import requests
 import datetime
 import time
+import pandas as pd
+from sqlalchemy import create_engine, text
 
 ## Authentication
+# SQL
+engine = create_engine('mysql+mysqlconnector://root:@localhost/mysql')
+
+# Since this script will populate the 'posts' table from scratch, we need to make sure
+# it is empty prior to appending (ie. INSERT INTO)
+drop_table = text("DROP TABLE IF EXISTS posts")
+with engine.connect() as con:
+    con.execute(drop_table)
+    con.commit()
+
+# Reddit
 def get_reddit_token():
 
     # Credentials, saved locally. Needs to be revised
@@ -50,20 +63,9 @@ headers = {
 # Given a url, this function will return the reponse. If failed, will return the error status code.
 def fetch_posts(url):
     response = requests.get(url, headers=headers)
-    ## This is strictly for debugging, fix later
-    print(f"Status Code: {response.status_code}")
     if response.status_code != 200:
         raise Exception(f"Error fetching data: {response.status_code}")
     return response.json()
-
-# Below are the target lists we are looking to generate, notice [id, title, sub, ups, ups_ratio, text]
-# will be captured for each post within the set time duration, for each targeted sub.
-post_id = []
-post_title = []
-post_sub = []
-post_ups = []
-post_ups_ratio = []
-post_text = []
 
 ## This loop will populate the above lists
 for sub in stock_sub_list:
@@ -86,17 +88,27 @@ for sub in stock_sub_list:
         # Embedding datetime values into the url in proper format.
         url = f'{base_url}&before={before_timestamp}&after={after_timestamp}'
 
-        # Getting the json response data
+        # Getting the json response data and parsing
         response_data = fetch_posts(url)
         posts = response_data['data']['children']
+
+        # Below are the target lists we are looking to generate, notice [id, title, sub, ups, ups_ratio, text]
+        # will be captured for each post within the set time duration, for each targeted sub.
+        post_id = []
+        post_title = []
+        post_sub = []
+        post_ups = []
+        post_ups_ratio = []
+        post_text = []
 
         if response_data is None or 'data' not in response_data or 'children' not in response_data['data']:
             print("No more posts found or error in fetching data.")
             break
         
-        # For debugging, having issues where API call returns 200 (sucsess) but has empty list
+        # For debugging, having issues where API call returns 200 (sucsess) but has an empty values
         if not posts:
             print(f"No posts found for {start_date_dt.strftime('%Y-%m-%d')}.")
+            break
         # If response is not empty, appends values to primary lists
         # Likely should be noted that this messy append stuff only exists becuase we need to translate
         # json format to column/row
@@ -109,22 +121,26 @@ for sub in stock_sub_list:
                 post_ups.append(post['data']['ups'])
                 post_ups_ratio.append(post['data']['upvote_ratio'])
                 post_text.append(post['data'].get('selftext', ''))
+
+        # Creating dataframe from above lists
+        data = {
+            'id': post_id,
+            'title': post_title,
+            'subreddit': post_sub,
+            'upvotes': post_ups,
+            'upvote_ratio': post_ups_ratio,
+            'text_body': post_text
+        }
+        df = pd.DataFrame(data)
+
+        # Pushing to sql, the 'to_sql()' pandas function is quite amazing
+        df.to_sql('posts', con=engine, if_exists='append', index=False)
             
         # Moving date range one day backward    
         start_date_dt -= datetime.timedelta(days=1)
-        
+
         # Respecting reddit API call limits
         time.sleep(1)
 
         ## Inlcuding this print statement for sanity as this takes forever to run
         print(start_date_dt)
-
-print(post_id)
-print(len(post_id))
-print(len(post_sub))
-print(len(post_ups))
-print(len(post_text))
-print(post_title[-1])
-
-
-
