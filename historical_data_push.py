@@ -145,7 +145,5 @@ def main():
             # Respecting reddit API call limits
             time.sleep(1)
 
-            # Inlcuding this print statement for sanity as this takes forever to run
-            print(start_date_dt)
-if __name__ == '__main__':
-    main()
+        ## Inlcuding this print statement for sanity as this takes forever to run
+        print(start_date_dt)
