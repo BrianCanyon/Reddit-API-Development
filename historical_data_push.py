@@ -10,7 +10,7 @@ import re # needs to be here
 
 ## Authentication
 # SQL
-engine = create_engine('mysql+mysqlconnector://root:@localhost/mysql')
+engine = create_engine('mysql+mysqlconnector://root:59shredder@localhost/mysql')
 
 # Since this script will populate the 'posts' table from scratch, we need to make sure
 # it is empty prior to appending (ie. INSERT INTO)
