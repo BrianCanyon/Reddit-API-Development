@@ -1,8 +1,8 @@
 ## Playing with openAI
 import openai
 
-with open("/Users/brian.canyon.Documents/openAI.key.txt")as file:
-    key = file.read()
+with open("/Users/brian.canyon/Documents/openAI.key.txt")as file:
+    openai.api_key = file.read()
 
 response = openai.Completion.create(
     engine ='gpt-3.5-turbo',
